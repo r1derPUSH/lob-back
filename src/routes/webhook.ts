@@ -2,6 +2,10 @@ import { Router, Request, Response } from "express";
 
 const DRY_RUN = false;
 
+const PROPERTY_LABELS: Record<string, string> = {
+  sliced: "Would you like your bread sliced?",
+};
+
 function isPlannerOrder(order: any) {
   return order.line_items?.some((item: any) =>
     item.properties?.some((p: any) => p.name === "subscriptionPlannerId"),
@@ -146,7 +150,7 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
         variantId: `gid://shopify/ProductVariant/${item.variant_id}`,
         quantity: item.quantity,
         properties: item.properties?.map((p: any) => ({
-          name: p.name,
+          name: PROPERTY_LABELS[p.name] ?? p.name,
           value: p.value,
         })),
       }));
