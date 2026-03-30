@@ -31,8 +31,8 @@ async function shopifyGraphQL(query: string, variables: any) {
 }
 
 const CREATE_ORDER = `
-mutation orderCreate($input: OrderInput!) {
-  orderCreate(input: $input) {
+mutation orderCreate($order: OrderCreateOrderInput!) {
+  orderCreate(order: $order) {
     order {
       id
       name
@@ -138,7 +138,7 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
       }));
 
       const variables = {
-        input: {
+        order: {
           lineItems,
           tags: [`SPLIT_FROM_${order.id}`],
           note: `Split from order ${order.name} | ${zapietId} | SPLIT_DONE`,
