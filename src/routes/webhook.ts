@@ -148,6 +148,21 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
           tags: [`SPLIT_FROM_${order.id}`],
           note: `Split from order ${order.name} | ${zapietId} | SPLIT_DONE`,
           customerId: `gid://shopify/Customer/${order.customer?.id}`,
+          noteAttributes: order.note_attributes?.map((attr: any) => ({
+            name: attr.name,
+            value: attr.value,
+          })),
+          shippingAddress: order.shipping_address
+            ? {
+                firstName: order.shipping_address.first_name,
+                lastName: order.shipping_address.last_name,
+                address1: order.shipping_address.address1,
+                city: order.shipping_address.city,
+                countryCode: order.shipping_address.country_code,
+                zip: order.shipping_address.zip,
+                phone: order.shipping_address.phone,
+              }
+            : undefined,
           metafields: [
             {
               namespace: "zapiet",
