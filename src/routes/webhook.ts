@@ -52,6 +52,21 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
 
     console.log("🧩 GROUPED ORDERS:", groups);
 
+    for (const zapietId in groups) {
+      const items = groups[zapietId];
+
+      console.log("🧪 SPLIT PREVIEW:", {
+        originalOrderId: order.id,
+        zapietId,
+        itemsCount: items.length,
+        items: items.map((i: any) => ({
+          title: i.title,
+          quantity: i.quantity,
+          variant_id: i.variant_id,
+        })),
+      });
+    }
+
     console.log("Line items:", order.line_items?.length);
     console.log(
       "🧾 Properties:",
