@@ -1,5 +1,7 @@
 import { Router, Request, Response } from "express";
 
+const DRY_RUN = true;
+
 function isPlannerOrder(order: any) {
   return order.line_items?.some((item: any) =>
     item.properties?.some((p: any) => p.name === "subscriptionPlannerId"),
@@ -25,7 +27,7 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
       return;
     }
 
-    if (tags.includes("SPLIT_FROM")) {
+    if (tags.some((t: string) => t.startsWith("SPLIT_FROM"))) {
       console.log("Skip: already split");
       return;
     }
@@ -64,6 +66,20 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
           quantity: i.quantity,
           variant_id: i.variant_id,
         })),
+      });
+    }
+
+    if (DRY_RUN) {
+      console.log("🛑 DRY RUN ENABLED — no orders will be created");
+      return;
+    }
+
+    for (const zapietId in groups) {
+      const items = groups[zapietId];
+
+      console.log("🚀 WILL CREATE ORDER:", {
+        zapietId,
+        itemsCount: items.length,
       });
     }
 
