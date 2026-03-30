@@ -32,6 +32,26 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
 
     console.log("Planner order detected");
 
+    const groups: Record<string, any[]> = {};
+
+    for (const item of order.line_items) {
+      const zapietProp = item.properties?.find(
+        (p: any) => p.name === "_ZapietId",
+      );
+
+      if (!zapietProp) continue;
+
+      const zapietId = zapietProp.value;
+
+      if (!groups[zapietId]) {
+        groups[zapietId] = [];
+      }
+
+      groups[zapietId].push(item);
+    }
+
+    console.log("🧩 GROUPED ORDERS:", groups);
+
     console.log("Line items:", order.line_items?.length);
     console.log(
       "🧾 Properties:",
