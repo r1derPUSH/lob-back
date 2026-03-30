@@ -131,10 +131,6 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
       const lineItems = items.map((item: any) => ({
         variantId: `gid://shopify/ProductVariant/${item.variant_id}`,
         quantity: item.quantity,
-        customAttributes: item.properties?.map((p: any) => ({
-          key: p.name,
-          value: p.value,
-        })),
       }));
 
       const variables = {
