@@ -66,6 +66,11 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
 
     console.log("Order received:", order.id);
 
+    console.log(
+      "Note attributes:",
+      JSON.stringify(order.note_attributes, null, 2),
+    );
+
     const tags = order.tags
       ? order.tags.split(",").map((t: string) => t.trim())
       : [];
