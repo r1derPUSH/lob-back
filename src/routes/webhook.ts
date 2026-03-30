@@ -10,12 +10,12 @@ function isPlannerOrder(order: any) {
 
 async function shopifyGraphQL(query: string, variables: any) {
   const res = await fetch(
-    `https://${process.env.SHOPIFY_STORE}/admin/api/2026-01/graphql.json`,
+    `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-01/graphql.json`,
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Shopify-Access-Token": process.env.SHOPIFY_ACCESS_TOKEN!,
+        "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_ACCESS_TOKEN!,
       },
       body: JSON.stringify({ query, variables }),
     },
