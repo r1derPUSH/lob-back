@@ -1,12 +1,49 @@
 import { Router, Request, Response } from "express";
 
-const DRY_RUN = true;
+const DRY_RUN = false;
 
 function isPlannerOrder(order: any) {
   return order.line_items?.some((item: any) =>
     item.properties?.some((p: any) => p.name === "subscriptionPlannerId"),
   );
 }
+
+async function shopifyGraphQL(query: string, variables: any) {
+  const res = await fetch(
+    `https://${process.env.SHOPIFY_STORE}/admin/api/2026-01/graphql.json`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": process.env.SHOPIFY_ACCESS_TOKEN!,
+      },
+      body: JSON.stringify({ query, variables }),
+    },
+  );
+
+  const data = await res.json();
+
+  if (data.errors) {
+    console.error("GraphQL error:", data.errors);
+  }
+
+  return data;
+}
+
+const CREATE_ORDER = `
+mutation orderCreate($input: OrderInput!) {
+  orderCreate(input: $input) {
+    order {
+      id
+      name
+    }
+    userErrors {
+      field
+      message
+    }
+  }
+}
+`;
 
 const router = Router();
 
@@ -20,7 +57,9 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
 
     console.log("Order received:", order.id);
 
-    const tags = order.tags ? order.tags.split(",") : [];
+    const tags = order.tags
+      ? order.tags.split(",").map((t: string) => t.trim())
+      : [];
 
     if (!isPlannerOrder(order)) {
       console.log("Skip: not planner");
@@ -33,6 +72,11 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
     }
 
     console.log("Planner order detected");
+
+    if (order.note?.includes("SPLIT_DONE")) {
+      console.log("⛔ Already processed");
+      return;
+    }
 
     const groups: Record<string, any[]> = {};
 
@@ -52,12 +96,17 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
       groups[zapietId].push(item);
     }
 
-    console.log("🧩 GROUPED ORDERS:", groups);
+    console.log("GROUPED ORDERS:", groups);
+
+    if (Object.keys(groups).length > 20) {
+      console.log("🚨 TOO MANY SPLITS — skipping");
+      return;
+    }
 
     for (const zapietId in groups) {
       const items = groups[zapietId];
 
-      console.log("🧪 SPLIT PREVIEW:", {
+      console.log("SPLIT PREVIEW:", {
         originalOrderId: order.id,
         zapietId,
         itemsCount: items.length,
@@ -70,22 +119,50 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
     }
 
     if (DRY_RUN) {
-      console.log("🛑 DRY RUN ENABLED — no orders will be created");
+      console.log("DRY RUN ENABLED — no orders will be created");
       return;
     }
 
     for (const zapietId in groups) {
       const items = groups[zapietId];
 
-      console.log("🚀 WILL CREATE ORDER:", {
-        zapietId,
-        itemsCount: items.length,
-      });
+      console.log("🚀 Creating split order for:", zapietId);
+
+      const lineItems = items.map((item: any) => ({
+        variantId: `gid://shopify/ProductVariant/${item.variant_id}`,
+        quantity: item.quantity,
+        customAttributes: item.properties?.map((p: any) => ({
+          key: p.name,
+          value: p.value,
+        })),
+      }));
+
+      const variables = {
+        input: {
+          lineItems,
+          tags: [`SPLIT_FROM_${order.id}`],
+          note: `Split from order ${order.name} | ${zapietId} | SPLIT_DONE`,
+        },
+      };
+
+      const result = await shopifyGraphQL(CREATE_ORDER, variables);
+
+      if (result?.data?.orderCreate?.userErrors?.length) {
+        console.error("USER ERRORS:", result.data.orderCreate.userErrors);
+      }
+
+      const createdOrderId = result?.data?.orderCreate?.order?.id;
+
+      if (createdOrderId) {
+        console.log("✅ CREATED ORDER:", createdOrderId);
+      }
+
+      console.log("CREATE RESULT:", JSON.stringify(result, null, 2));
     }
 
     console.log("Line items:", order.line_items?.length);
     console.log(
-      "🧾 Properties:",
+      "Properties:",
       order.line_items?.map((i: any) => i.properties),
     );
   } catch (err) {
