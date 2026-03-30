@@ -45,6 +45,15 @@ mutation orderCreate($order: OrderCreateOrderInput!) {
 }
 `;
 
+const CANCEL_ORDER = `
+mutation orderCancel($orderId: ID!) {
+  orderCancel(orderId: $orderId, reason: OTHER, refund: false, restock: false, notifyCustomer: false) {
+    job { id }
+    userErrors { field message }
+  }
+}
+`;
+
 const router = Router();
 
 router.post("/orders-paid", async (req: Request, res: Response) => {
@@ -138,6 +147,21 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
           lineItems,
           tags: [`SPLIT_FROM_${order.id}`],
           note: `Split from order ${order.name} | ${zapietId} | SPLIT_DONE`,
+          customerId: `gid://shopify/Customer/${order.customer?.id}`,
+          metafields: [
+            {
+              namespace: "zapiet",
+              key: "location_id",
+              value: zapietId.match(/L=(\d+)/)?.[1] ?? "",
+              type: "single_line_text_field",
+            },
+            {
+              namespace: "zapiet",
+              key: "delivery_date",
+              value: zapietId.match(/D=([^&]+)/)?.[1] ?? "",
+              type: "single_line_text_field",
+            },
+          ],
         },
       };
 
@@ -155,6 +179,11 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
 
       console.log("CREATE RESULT:", JSON.stringify(result, null, 2));
     }
+
+    await shopifyGraphQL(CANCEL_ORDER, {
+      orderId: order.admin_graphql_api_id,
+    });
+    console.log("🗑️ Original order cancelled:", order.id);
 
     console.log("Line items:", order.line_items?.length);
     console.log(
