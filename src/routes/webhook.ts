@@ -209,25 +209,49 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
     });
     console.log("Original order cancelled:", order.id);
 
-    const variantIds = order.line_items.map((item: any) => item.variant_id);
-    const uniqueVariantIds = [...new Set(variantIds)];
+    // повертаємо DENY і -1 inventory
+    for (const item of order.line_items) {
+      const variantRes = await fetch(
+        `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-01/variants/${item.variant_id}.json`,
+        {
+          headers: {
+            "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_ACCESS_TOKEN!,
+          },
+        },
+      );
+      const variantData = await variantRes.json();
+      const inventoryItemId = variantData?.variant?.inventory_item_id;
 
-    await Promise.all(
-      uniqueVariantIds.map((variantId) =>
-        shopifyGraphQL(
-          `mutation updateVariantPolicy($id: ID!) {
-            productVariantUpdate(input: { id: $id, inventoryPolicy: DENY }) {
-              productVariant { id inventoryPolicy }
-              userErrors { field message }
-            }
-          }`,
-          { id: `gid://shopify/ProductVariant/${variantId}` },
-        ),
-      ),
-    );
+      if (inventoryItemId) {
+        await fetch(
+          `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-01/inventory_levels/adjust.json`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_ACCESS_TOKEN!,
+            },
+            body: JSON.stringify({
+              inventory_item_id: inventoryItemId,
+              location_id: Number(process.env.SHOPIFY_LOCATION_ID),
+              available_adjustment: -1,
+            }),
+          },
+        );
+      }
 
-    console.log("✅ inventoryPolicy restored to DENY for", uniqueVariantIds);
+      await shopifyGraphQL(
+        `mutation updateVariantPolicy($id: ID!) {
+          productVariantUpdate(input: { id: $id, inventoryPolicy: DENY }) {
+            productVariant { id inventoryPolicy }
+            userErrors { field message }
+          }
+        }`,
+        { id: `gid://shopify/ProductVariant/${item.variant_id}` },
+      );
+    }
 
+    console.log("✅ inventory -1 and DENY restored");
     console.log("Line items:", order.line_items?.length);
     console.log(
       "Properties:",

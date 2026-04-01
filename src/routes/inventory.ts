@@ -20,7 +20,23 @@ async function shopifyGraphQL(query: string, variables: any) {
 const UPDATE_INVENTORY_POLICY = `
   mutation updateVariantPolicy($id: ID!, $policy: ProductVariantInventoryPolicy!) {
     productVariantUpdate(input: { id: $id, inventoryPolicy: $policy }) {
-      productVariant { id inventoryPolicy }
+      productVariant { id inventoryPolicy inventoryItem { id } }
+      userErrors { field message }
+    }
+  }
+`;
+
+const ADJUST_INVENTORY = `
+  mutation adjustInventory($inventoryItemId: ID!, $locationId: ID!, $delta: Int!) {
+    inventoryAdjustQuantities(input: {
+      reason: "correction",
+      name: "available",
+      changes: [{
+        inventoryItemId: $inventoryItemId,
+        locationId: $locationId,
+        delta: $delta
+      }]
+    }) {
       userErrors { field message }
     }
   }
@@ -57,6 +73,23 @@ router.post("/set-policy", async (req: Request, res: Response) => {
     console.error("Policy update errors:", errors);
     res.status(500).json({ errors });
     return;
+  }
+
+  if (policy === "CONTINUE") {
+    await Promise.all(
+      results.map((r) => {
+        const inventoryItemId =
+          r?.data?.productVariantUpdate?.productVariant?.inventoryItem?.id;
+        if (!inventoryItemId) return;
+
+        return shopifyGraphQL(ADJUST_INVENTORY, {
+          inventoryItemId,
+          locationId: `gid://shopify/Location/${process.env.SHOPIFY_LOCATION_ID}`,
+          delta: 1,
+        });
+      }),
+    );
+    console.log(`✅ +1 inventory for`, variantIds);
   }
 
   console.log(`✅ inventoryPolicy set to ${policy} for`, variantIds);
