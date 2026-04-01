@@ -18,9 +18,13 @@ async function shopifyGraphQL(query: string, variables: any) {
 }
 
 const UPDATE_INVENTORY_POLICY = `
-  mutation updateVariantPolicy($id: ID!, $policy: ProductVariantInventoryPolicy!) {
-    productVariantUpdate(input: { id: $id, inventoryPolicy: $policy }) {
-      productVariant { id inventoryPolicy inventoryItem { id } }
+  mutation updateVariantPolicy($input: ProductVariantInput!) {
+    productVariantUpdate(input: $input) {
+      productVariant {
+        id
+        inventoryPolicy
+        inventoryItem { id }
+      }
       userErrors { field message }
     }
   }
@@ -61,8 +65,10 @@ router.post("/set-policy", async (req: Request, res: Response) => {
   const results = await Promise.all(
     variantIds.map((id) =>
       shopifyGraphQL(UPDATE_INVENTORY_POLICY, {
-        id: `gid://shopify/ProductVariant/${id}`,
-        policy,
+        input: {
+          id: `gid://shopify/ProductVariant/${id}`,
+          inventoryPolicy: policy,
+        },
       }),
     ),
   );
