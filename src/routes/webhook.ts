@@ -209,7 +209,6 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
     });
     console.log("Original order cancelled:", order.id);
 
-    // повертаємо DENY і -1 inventory
     for (const item of order.line_items) {
       const variantRes = await fetch(
         `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-01/variants/${item.variant_id}.json`,
@@ -221,6 +220,7 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
       );
       const variantData = await variantRes.json();
       const inventoryItemId = variantData?.variant?.inventory_item_id;
+      const productId = variantData?.variant?.product_id;
 
       if (inventoryItemId) {
         await fetch(
@@ -240,18 +240,26 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
         );
       }
 
-      await shopifyGraphQL(
-        `mutation updateVariantPolicy($id: ID!) {
-          productVariantUpdate(input: { id: $id, inventoryPolicy: DENY }) {
-            productVariant { id inventoryPolicy }
-            userErrors { field message }
-          }
-        }`,
-        { id: `gid://shopify/ProductVariant/${item.variant_id}` },
-      );
+      if (productId) {
+        await shopifyGraphQL(
+          `mutation updateVariantPolicy($productId: ID!, $variantId: ID!) {
+            productVariantsBulkUpdate(productId: $productId, variants: [{
+              id: $variantId,
+              inventoryPolicy: DENY
+            }]) {
+              productVariants { id inventoryPolicy }
+              userErrors { field message }
+            }
+          }`,
+          {
+            productId: `gid://shopify/Product/${productId}`,
+            variantId: `gid://shopify/ProductVariant/${item.variant_id}`,
+          },
+        );
+      }
     }
 
-    console.log("✅ inventory -1 and DENY restored");
+    console.log("✅ inventory -quantity and DENY restored");
     console.log("Line items:", order.line_items?.length);
     console.log(
       "Properties:",
