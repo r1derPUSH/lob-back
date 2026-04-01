@@ -2,10 +2,18 @@ import express from "express";
 import dotenv from "dotenv";
 import webhookRouter from "./routes/webhook";
 import inventoryRouter from "./routes/inventory";
+import cors from "cors";
 
 dotenv.config();
 
 const app = express();
+
+app.use(
+  cors({
+    origin: ["https://fortheloveofbread.ae", "http://localhost:5173"],
+  }),
+);
+
 const PORT = process.env.PORT || 3000;
 
 app.use("/webhooks", express.raw({ type: "application/json" }));
