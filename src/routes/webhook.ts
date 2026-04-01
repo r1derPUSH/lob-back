@@ -87,7 +87,18 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
     console.log("Adjusting inventory...");
 
     for (const item of order.line_items) {
-      const inventoryItemId = item.inventory_item_id;
+      const variantRes = await fetch(
+        `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-01/variants/${item.variant_id}.json`,
+        {
+          headers: {
+            "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_ACCESS_TOKEN!,
+          },
+        },
+      );
+
+      const variantData = await variantRes.json();
+
+      const inventoryItemId = variantData?.variant?.inventory_item_id;
       const quantity = item.quantity;
 
       if (!inventoryItemId) {
@@ -106,7 +117,7 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
             },
             body: JSON.stringify({
               inventory_item_id: inventoryItemId,
-              available_adjustment: quantity, //
+              available_adjustment: quantity,
             }),
           },
         );
