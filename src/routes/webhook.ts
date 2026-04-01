@@ -209,6 +209,8 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
     });
     console.log("Original order cancelled:", order.id);
 
+    console.log("Starting inventory restore...");
+
     const variantQuantityMap: Record<string, number> = {};
     for (const item of order.line_items) {
       const key = String(item.variant_id);
