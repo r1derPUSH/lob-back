@@ -49,15 +49,17 @@ router.post("/set-policy", async (req: Request, res: Response) => {
     return;
   }
 
-  const { variantIds, policy } = req.body;
+  const { variantQuantities, policy } = req.body;
 
-  if (!variantIds?.length || !policy) {
-    res.status(400).json({ error: "variantIds and policy required" });
+  if (!variantQuantities || !policy) {
+    res.status(400).json({ error: "variantQuantities and policy required" });
     return;
   }
 
+  const variantIds = Object.keys(variantQuantities);
+
   const results = await Promise.all(
-    variantIds.map((id: number) =>
+    variantIds.map((id) =>
       shopifyGraphQL(UPDATE_INVENTORY_POLICY, {
         id: `gid://shopify/ProductVariant/${id}`,
         policy,
@@ -77,7 +79,9 @@ router.post("/set-policy", async (req: Request, res: Response) => {
 
   if (policy === "CONTINUE") {
     await Promise.all(
-      results.map((r) => {
+      results.map((r, i) => {
+        const variantId = variantIds[i];
+        const quantity = Number(variantQuantities[variantId]);
         const inventoryItemId =
           r?.data?.productVariantUpdate?.productVariant?.inventoryItem?.id;
         if (!inventoryItemId) return;
@@ -85,11 +89,11 @@ router.post("/set-policy", async (req: Request, res: Response) => {
         return shopifyGraphQL(ADJUST_INVENTORY, {
           inventoryItemId,
           locationId: `gid://shopify/Location/${process.env.SHOPIFY_LOCATION_ID}`,
-          delta: 1,
+          delta: quantity,
         });
       }),
     );
-    console.log(`✅ +1 inventory for`, variantIds);
+    console.log(`✅ +quantity inventory for`, variantQuantities);
   }
 
   console.log(`✅ inventoryPolicy set to ${policy} for`, variantIds);
