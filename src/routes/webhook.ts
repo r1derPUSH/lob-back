@@ -144,7 +144,7 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
     for (const zapietId in groups) {
       const items = groups[zapietId];
 
-      console.log("🚀 Creating split order for:", zapietId);
+      console.log(" Creating split order for:", zapietId);
 
       const lineItems = items.map((item: any) => ({
         variantId: `gid://shopify/ProductVariant/${item.variant_id}`,
@@ -209,9 +209,17 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
     });
     console.log("Original order cancelled:", order.id);
 
+    const variantQuantityMap: Record<string, number> = {};
     for (const item of order.line_items) {
+      const key = String(item.variant_id);
+      variantQuantityMap[key] = (variantQuantityMap[key] || 0) + item.quantity;
+    }
+
+    for (const [variantId, totalQuantity] of Object.entries(
+      variantQuantityMap,
+    )) {
       const variantRes = await fetch(
-        `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-01/variants/${item.variant_id}.json`,
+        `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-01/variants/${variantId}.json`,
         {
           headers: {
             "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_ACCESS_TOKEN!,
@@ -234,7 +242,7 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
             body: JSON.stringify({
               inventory_item_id: inventoryItemId,
               location_id: Number(process.env.SHOPIFY_LOCATION_ID),
-              available_adjustment: -item.quantity,
+              available_adjustment: -totalQuantity,
             }),
           },
         );
@@ -253,13 +261,13 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
           }`,
           {
             productId: `gid://shopify/Product/${productId}`,
-            variantId: `gid://shopify/ProductVariant/${item.variant_id}`,
+            variantId: `gid://shopify/ProductVariant/${variantId}`,
           },
         );
       }
     }
 
-    console.log("✅ inventory -quantity and DENY restored");
+    console.log("inventory -quantity and DENY restored");
     console.log("Line items:", order.line_items?.length);
     console.log(
       "Properties:",
