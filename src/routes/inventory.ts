@@ -67,6 +67,8 @@ router.post("/set-policy", async (req: Request, res: Response) => {
     ),
   );
 
+  console.log("Policy result:", JSON.stringify(results[0], null, 2));
+
   const errors = results.flatMap(
     (r) => r?.data?.productVariantUpdate?.userErrors ?? [],
   );
