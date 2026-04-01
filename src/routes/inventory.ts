@@ -78,13 +78,23 @@ router.post("/set-policy", async (req: Request, res: Response) => {
   }
 
   if (policy === "CONTINUE") {
-    await Promise.all(
+    const adjustResults = await Promise.all(
       results.map((r, i) => {
         const variantId = variantIds[i];
         const quantity = Number(variantQuantities[variantId]);
         const inventoryItemId =
           r?.data?.productVariantUpdate?.productVariant?.inventoryItem?.id;
-        if (!inventoryItemId) return;
+
+        if (!inventoryItemId) {
+          console.log("❌ No inventoryItemId for variant:", variantId);
+          return;
+        }
+
+        console.log("Adjusting inventory:", {
+          inventoryItemId,
+          quantity,
+          locationId: process.env.SHOPIFY_LOCATION_ID,
+        });
 
         return shopifyGraphQL(ADJUST_INVENTORY, {
           inventoryItemId,
@@ -93,6 +103,8 @@ router.post("/set-policy", async (req: Request, res: Response) => {
         });
       }),
     );
+
+    console.log("Adjust results:", JSON.stringify(adjustResults, null, 2));
     console.log(`✅ +quantity inventory for`, variantQuantities);
   }
 
