@@ -84,6 +84,45 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
       return;
     }
 
+    console.log("Adjusting inventory...");
+
+    for (const item of order.line_items) {
+      const inventoryItemId = item.inventory_item_id;
+      const quantity = item.quantity;
+
+      if (!inventoryItemId) {
+        console.log("No inventory_item_id for item:", item.title);
+        continue;
+      }
+
+      try {
+        const res = await fetch(
+          `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-01/inventory_levels/adjust.json`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_ACCESS_TOKEN!,
+            },
+            body: JSON.stringify({
+              inventory_item_id: inventoryItemId,
+              available_adjustment: quantity, //
+            }),
+          },
+        );
+
+        const data = await res.json();
+
+        console.log("✅ Inventory updated:", {
+          title: item.title,
+          quantity,
+          response: data,
+        });
+      } catch (err) {
+        console.error("❌ Inventory error:", err);
+      }
+    }
+
     if (tags.some((t: string) => t.startsWith("SPLIT_FROM"))) {
       console.log("Skip: already split");
       return;
