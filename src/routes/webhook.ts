@@ -117,6 +117,7 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
             },
             body: JSON.stringify({
               inventory_item_id: inventoryItemId,
+              location_id: Number(process.env.SHOPIFY_LOCATION_ID),
               available_adjustment: quantity,
             }),
           },
