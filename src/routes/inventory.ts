@@ -17,10 +17,23 @@ async function shopifyGraphQL(query: string, variables: any) {
   return res.json();
 }
 
+const GET_VARIANT = `
+  query getVariant($id: ID!) {
+    productVariant(id: $id) {
+      id
+      inventoryItem { id }
+      product { id }
+    }
+  }
+`;
+
 const UPDATE_INVENTORY_POLICY = `
-  mutation updateVariantPolicy($input: ProductVariantInput!) {
-    productVariantUpdate(input: $input) {
-      productVariant {
+  mutation updateVariantPolicy($productId: ID!, $variantId: ID!, $policy: ProductVariantInventoryPolicy!) {
+    productVariantsBulkUpdate(productId: $productId, variants: [{
+      id: $variantId,
+      inventoryPolicy: $policy
+    }]) {
+      productVariants {
         id
         inventoryPolicy
         inventoryItem { id }
@@ -62,21 +75,33 @@ router.post("/set-policy", async (req: Request, res: Response) => {
 
   const variantIds = Object.keys(variantQuantities);
 
-  const results = await Promise.all(
+  const variantData = await Promise.all(
     variantIds.map((id) =>
-      shopifyGraphQL(UPDATE_INVENTORY_POLICY, {
-        input: {
-          id: `gid://shopify/ProductVariant/${id}`,
-          inventoryPolicy: policy,
-        },
+      shopifyGraphQL(GET_VARIANT, {
+        id: `gid://shopify/ProductVariant/${id}`,
       }),
     ),
+  );
+
+  console.log("Variant data:", JSON.stringify(variantData[0], null, 2));
+
+  const results = await Promise.all(
+    variantData.map((v) => {
+      const variant = v?.data?.productVariant;
+      if (!variant) return null;
+
+      return shopifyGraphQL(UPDATE_INVENTORY_POLICY, {
+        productId: variant.product.id,
+        variantId: variant.id,
+        policy,
+      });
+    }),
   );
 
   console.log("Policy result:", JSON.stringify(results[0], null, 2));
 
   const errors = results.flatMap(
-    (r) => r?.data?.productVariantUpdate?.userErrors ?? [],
+    (r) => r?.data?.productVariantsBulkUpdate?.userErrors ?? [],
   );
 
   if (errors.length) {
@@ -87,14 +112,14 @@ router.post("/set-policy", async (req: Request, res: Response) => {
 
   if (policy === "CONTINUE") {
     const adjustResults = await Promise.all(
-      results.map((r, i) => {
+      variantData.map((v, i) => {
+        const variant = v?.data?.productVariant;
         const variantId = variantIds[i];
         const quantity = Number(variantQuantities[variantId]);
-        const inventoryItemId =
-          r?.data?.productVariantUpdate?.productVariant?.inventoryItem?.id;
+        const inventoryItemId = variant?.inventoryItem?.id;
 
         if (!inventoryItemId) {
-          console.log("❌ No inventoryItemId for variant:", variantId);
+          console.log(" No inventoryItemId for variant:", variantId);
           return;
         }
 
