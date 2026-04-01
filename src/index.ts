@@ -1,6 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import webhookRouter from "./routes/webhook";
+import plannerRouter from "./routes/planner";
 
 dotenv.config();
 
@@ -16,6 +17,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/webhooks", webhookRouter);
+app.use("/planner", plannerRouter);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

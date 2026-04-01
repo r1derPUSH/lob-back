@@ -79,7 +79,7 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
       ? order.tags.split(",").map((t: string) => t.trim())
       : [];
 
-    if (!isPlannerOrder(order)) {
+    if (!isPlannerOrder(order) || !tags.includes("PLANNER_DEV")) {
       console.log("Skip: not planner");
       return;
     }
