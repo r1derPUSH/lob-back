@@ -145,4 +145,30 @@ router.post("/set-policy", async (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
+router.post("/create-discount", async (req: Request, res: Response) => {
+  const secret = req.headers["x-planner-secret"];
+  if (secret !== process.env.PLANNER_SECRET) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const result = await shopifyGraphQL(
+    `
+    mutation {
+      discountAutomaticAppCreate(automaticAppDiscount: {
+        title: "Member Bread Discount"
+        functionId: "908527ee-8298-eb7b-abea-80d8267116​73a850bbd8"
+        startsAt: "2024-01-01T00:00:00Z"
+      }) {
+        automaticAppDiscount { discountId }
+        userErrors { field message }
+      }
+    }
+  `,
+    {},
+  );
+
+  res.json(result);
+});
+
 export default router;

@@ -16,7 +16,7 @@ function isPlannerOrder(order: any) {
 
 function isMembershipOrder(order: any): boolean {
   return order.line_items?.some(
-    (item: any) => item.product_id === MEMBERSHIP_PRODUCT_ID,
+    (item: any) => Number(item.product_id) === MEMBERSHIP_PRODUCT_ID,
   );
 }
 
