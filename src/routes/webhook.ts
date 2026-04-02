@@ -2,6 +2,8 @@ import { Router, Request, Response } from "express";
 
 const DRY_RUN = false;
 
+const MEMBERSHIP_PRODUCT_ID = 8821798600871;
+
 const PROPERTY_LABELS: Record<string, string> = {
   sliced: "Would you like your bread sliced?",
 };
@@ -10,6 +12,43 @@ function isPlannerOrder(order: any) {
   return order.line_items?.some((item: any) =>
     item.properties?.some((p: any) => p.name === "subscriptionPlannerId"),
   );
+}
+
+function isMembershipOrder(order: any): boolean {
+  return order.line_items?.some(
+    (item: any) => item.product_id === MEMBERSHIP_PRODUCT_ID,
+  );
+}
+
+async function setSubscriberMetafield(customerId: number): Promise<void> {
+  const result = await shopifyGraphQL(
+    `
+    mutation setMetafield($metafields: [MetafieldsSetInput!]!) {
+      metafieldsSet(metafields: $metafields) {
+        metafields { key namespace value }
+        userErrors { field message }
+      }
+    }
+  `,
+    {
+      metafields: [
+        {
+          ownerId: `gid://shopify/Customer/${customerId}`,
+          namespace: "custom",
+          key: "is_subscriber",
+          value: "true",
+          type: "boolean",
+        },
+      ],
+    },
+  );
+
+  const errors = result?.data?.metafieldsSet?.userErrors;
+  if (errors?.length) {
+    console.error("❌ Metafield errors:", errors);
+  } else {
+    console.log(`✅ is_subscriber = true → customer ${customerId}`);
+  }
 }
 
 async function shopifyGraphQL(query: string, variables: any) {
@@ -69,6 +108,12 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
     const order = JSON.parse(rawBody.toString());
 
     console.log("Order received:", order.id);
+
+    // Membership check
+    if (order.customer?.id && isMembershipOrder(order)) {
+      console.log("💳 Membership order — setting is_subscriber");
+      await setSubscriberMetafield(order.customer.id);
+    }
 
     console.log(
       "Note attributes:",
