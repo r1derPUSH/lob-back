@@ -144,7 +144,7 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
     for (const zapietId in groups) {
       const items = groups[zapietId];
 
-      console.log(" Creating split order for:", zapietId);
+      console.log("🚀 Creating split order for:", zapietId);
 
       const lineItems = items.map((item: any) => ({
         variantId: `gid://shopify/ProductVariant/${item.variant_id}`,
@@ -198,7 +198,7 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
       const createdOrderId = result?.data?.orderCreate?.order?.id;
 
       if (createdOrderId) {
-        console.log(" CREATED ORDER:", createdOrderId);
+        console.log("✅ CREATED ORDER:", createdOrderId);
       }
 
       console.log("CREATE RESULT:", JSON.stringify(result, null, 2));
@@ -209,17 +209,14 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
     });
     console.log("Original order cancelled:", order.id);
 
-    console.log("Starting inventory restore...");
-
+    // повертаємо DENY після обробки
     const variantQuantityMap: Record<string, number> = {};
     for (const item of order.line_items) {
       const key = String(item.variant_id);
       variantQuantityMap[key] = (variantQuantityMap[key] || 0) + item.quantity;
     }
 
-    for (const [variantId, totalQuantity] of Object.entries(
-      variantQuantityMap,
-    )) {
+    for (const [variantId] of Object.entries(variantQuantityMap)) {
       const variantRes = await fetch(
         `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-01/variants/${variantId}.json`,
         {
@@ -229,26 +226,7 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
         },
       );
       const variantData = await variantRes.json();
-      const inventoryItemId = variantData?.variant?.inventory_item_id;
       const productId = variantData?.variant?.product_id;
-
-      if (inventoryItemId) {
-        await fetch(
-          `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-01/inventory_levels/adjust.json`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_ACCESS_TOKEN!,
-            },
-            body: JSON.stringify({
-              inventory_item_id: inventoryItemId,
-              location_id: Number(process.env.SHOPIFY_LOCATION_ID),
-              available_adjustment: -totalQuantity,
-            }),
-          },
-        );
-      }
 
       if (productId) {
         await shopifyGraphQL(
@@ -269,7 +247,7 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
       }
     }
 
-    console.log("inventory -quantity and DENY restored");
+    console.log("✅ DENY restored for all variants");
     console.log("Line items:", order.line_items?.length);
     console.log(
       "Properties:",
