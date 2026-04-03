@@ -155,15 +155,16 @@ router.post("/create-discount", async (req: Request, res: Response) => {
   const result = await shopifyGraphQL(
     `
     mutation {
-      discountAutomaticAppCreate(automaticAppDiscount: {
-        title: "Member Bread Discount"
-        functionId: "019d4e1e-2f06-7191-a2af-5361c492ae53"
-        startsAt: "2024-01-01T00:00:00Z"
-      }) {
-        automaticAppDiscount { discountId }
-        userErrors { field message }
-      }
-    }
+  discountAutomaticAppCreate(automaticAppDiscount: {
+    title: "Member Bread Discount"
+    functionId: "019d4e1e-2f06-7191-a2af-5361c492ae53"
+    discountClasses: [PRODUCT, SHIPPING]
+    startsAt: "2024-01-01T00:00:00Z"
+  }) {
+    automaticAppDiscount { discountId }
+    userErrors { field message }
+  }
+}
   `,
     {},
   );
