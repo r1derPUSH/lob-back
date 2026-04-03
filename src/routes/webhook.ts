@@ -51,6 +51,30 @@ async function setSubscriberMetafield(customerId: number): Promise<void> {
   }
 }
 
+async function addSubscriberTag(customerId: number): Promise<void> {
+  const result = await shopifyGraphQL(
+    `
+    mutation addTag($id: ID!, $tags: [String!]!) {
+      tagsAdd(id: $id, tags: $tags) {
+        node { id }
+        userErrors { field message }
+      }
+    }
+  `,
+    {
+      id: `gid://shopify/Customer/${customerId}`,
+      tags: ["subscribed"],
+    },
+  );
+
+  const errors = result?.data?.tagsAdd?.userErrors;
+  if (errors?.length) {
+    console.error("❌ Tag errors:", errors);
+  } else {
+    console.log(`✅ tag subscribed → customer ${customerId}`);
+  }
+}
+
 async function shopifyGraphQL(query: string, variables: any) {
   const res = await fetch(
     `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-01/graphql.json`,
@@ -111,8 +135,9 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
 
     // Membership check
     if (order.customer?.id && isMembershipOrder(order)) {
-      console.log("💳 Membership order — setting is_subscriber");
+      console.log("💳 Membership order — setting is_subscriber + tag");
       await setSubscriberMetafield(order.customer.id);
+      await addSubscriberTag(order.customer.id);
     }
 
     console.log(
