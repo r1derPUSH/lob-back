@@ -157,7 +157,7 @@ router.post("/create-discount", async (req: Request, res: Response) => {
     mutation {
       discountAutomaticAppCreate(automaticAppDiscount: {
         title: "Member Bread Discount"
-        functionId: "908527ee-8298-eb7b-abea-80d8267116​73a850bbd8"
+        functionId: "908527ee-8298-eb7b-abea-80d826711673a850bbd8"
         startsAt: "2024-01-01T00:00:00Z"
       }) {
         automaticAppDiscount { discountId }
