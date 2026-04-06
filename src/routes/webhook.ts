@@ -63,7 +63,7 @@ async function addSubscriberTag(customerId: number): Promise<void> {
   `,
     {
       id: `gid://shopify/Customer/${customerId}`,
-      tags: ["subscribed"],
+      tags: ["select_member"],
     },
   );
 
@@ -71,7 +71,7 @@ async function addSubscriberTag(customerId: number): Promise<void> {
   if (errors?.length) {
     console.error("❌ Tag errors:", errors);
   } else {
-    console.log(`✅ tag subscribed → customer ${customerId}`);
+    console.log(`✅ tag select member → customer ${customerId}`);
   }
 }
 
