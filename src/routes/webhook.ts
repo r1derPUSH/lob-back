@@ -228,7 +228,6 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
       const variables = {
         order: {
           lineItems,
-          sourceName: "web",
           tags: [`SPLIT_FROM_${order.id}`],
           note: `Split from order ${order.name} | ${zapietId} | SPLIT_DONE`,
           customerId: `gid://shopify/Customer/${order.customer?.id}`,
