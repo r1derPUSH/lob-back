@@ -10,7 +10,7 @@ const PROPERTY_LABELS: Record<string, string> = {
 
 function isPlannerOrder(order: any) {
   return order.line_items?.some((item: any) =>
-    item.properties?.some((p: any) => p.name === "subscriptionPlannerId"),
+    item.properties?.some((p: any) => p.name === "_subscriptionPlannerId"),
   );
 }
 
