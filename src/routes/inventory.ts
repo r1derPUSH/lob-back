@@ -59,6 +59,96 @@ const ADJUST_INVENTORY = `
   }
 `;
 
+router.post("/create-draft-order", async (req: Request, res: Response) => {
+  const secret = req.headers["x-planner-secret"];
+  if (secret !== process.env.PLANNER_SECRET) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const { items, customerId, isSubscriber } = req.body;
+
+  const breadTitles = new Set([
+    "ORGANIC SOURDOUGH ANCIENT GRAINS II - TOURTE DE MEULE",
+    "ORGANIC OVERNIGHT OATS SOURDOUGH",
+    "ORGANIC SOURDOUGH ANCIENT GRAINS I - BATARD",
+    "ORGANIC FRENCH WHOLE WHEAT BREAD - TOURTE DE MEULE",
+    "CINNAMON CHERRY BRIOCHE - DELIVERY ON FRIDAY ONLY!",
+    "WALNUT RAISIN SOURDOUGH",
+    "ARTISAN BRIOCHE BUNS - PACK OF FOUR",
+    "ORGANIC FRENCH COUNTRY BREAD - TOURTE DE MEULE",
+    "ORGANIC SOURDOUGH WHOLE WHEAT BATARD",
+    "ORGANIC SOURDOUGH MULTI SEED",
+    "ORGANIC SOURDOUGH FRENCH RYE",
+    "CHOCOLATE CHIP BRIOCHE - DELIVERY ON FRIDAY ONLY!",
+    "TRADITIONAL FRENCH BRIOCHE - DELIVERY ON FRIDAY ONLY!",
+    "ORGANIC SOURDOUGH COUNTRY BATARD",
+  ]);
+
+  const breadPerDate: Record<string, number> = {};
+  for (const item of items) {
+    const zapietId = item.properties?.find(
+      (p: any) => p.name === "_ZapietId",
+    )?.value;
+    const title = item.title?.toUpperCase().trim();
+    if (zapietId && breadTitles.has(title)) {
+      breadPerDate[zapietId] = (breadPerDate[zapietId] || 0) + item.quantity;
+    }
+  }
+
+  const lineItems = items.map((item: any) => {
+    const zapietId = item.properties?.find(
+      (p: any) => p.name === "_ZapietId",
+    )?.value;
+    const title = item.title?.toUpperCase().trim();
+    const isBread = breadTitles.has(title);
+    const hasDiscount =
+      isSubscriber && isBread && zapietId && breadPerDate[zapietId] >= 3;
+
+    return {
+      variant_id: item.id,
+      quantity: item.quantity,
+      properties: item.properties,
+      ...(hasDiscount
+        ? {
+            applied_discount: {
+              value: "10",
+              value_type: "percentage",
+              title: "Bread Discount",
+            },
+          }
+        : {}),
+    };
+  });
+
+  const draftOrderRes = await fetch(
+    `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-01/draft_orders.json`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_ACCESS_TOKEN!,
+      },
+      body: JSON.stringify({
+        draft_order: {
+          line_items: lineItems,
+          customer: customerId ? { id: customerId } : undefined,
+        },
+      }),
+    },
+  );
+
+  const draftData = await draftOrderRes.json();
+  const checkoutUrl = draftData?.draft_order?.invoice_url;
+
+  if (!checkoutUrl) {
+    res.status(500).json({ error: "Failed to create draft order", draftData });
+    return;
+  }
+
+  res.json({ checkoutUrl });
+});
+
 router.post("/set-policy", async (req: Request, res: Response) => {
   const secret = req.headers["x-planner-secret"];
   if (secret !== process.env.PLANNER_SECRET) {
