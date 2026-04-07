@@ -24,7 +24,12 @@ app.use(
       }
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "x-presence-secret"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "x-presence-secret",
+      "x-planner-secret",
+    ],
     credentials: true,
   }),
 );
