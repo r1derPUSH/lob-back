@@ -10,7 +10,11 @@ const app = express();
 
 app.use(
   cors({
-    origin: ["https://fortheloveofbread.ae", "http://localhost:5173"],
+    origin: [
+      "https://fortheloveofbread.ae",
+      "https://fortheloveofbreaddubai.com",
+      "http://localhost:5173",
+    ],
   }),
 );
 
