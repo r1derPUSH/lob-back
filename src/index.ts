@@ -10,12 +10,22 @@ const app = express();
 
 app.use(
   cors({
-    origin: [
-      "https://fortheloveofbread.ae",
-      "https://fortheloveofbreaddubai.com",
-      "http://localhost:5173",
-      "https://gtpdrpji2lrpozok6-24217327.shopifypreview.com",
-    ],
+    origin: function (origin, callback) {
+      if (
+        !origin ||
+        origin.includes("shopifypreview.com") ||
+        origin.includes("fortheloveofbread.ae") ||
+        origin.includes("fortheloveofbreaddubai.com") ||
+        origin.includes("localhost")
+      ) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
   }),
 );
 
