@@ -14,6 +14,7 @@ app.use(
       "https://fortheloveofbread.ae",
       "https://fortheloveofbreaddubai.com",
       "http://localhost:5173",
+      "https://gtpdrpji2lrpozok6-24217327.shopifypreview.com",
     ],
   }),
 );
