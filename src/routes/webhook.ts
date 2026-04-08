@@ -214,7 +214,7 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
     for (const zapietId in groups) {
       const items = groups[zapietId];
 
-      console.log("🚀 Creating split order for:", zapietId);
+      console.log(" Creating split order for:", zapietId);
 
       const lineItems = items.map((item: any) => ({
         variantId: `gid://shopify/ProductVariant/${item.variant_id}`,
@@ -279,7 +279,6 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
     });
     console.log("Original order cancelled:", order.id);
 
-    // повертаємо DENY після обробки
     const variantQuantityMap: Record<string, number> = {};
     for (const item of order.line_items) {
       const key = String(item.variant_id);
@@ -317,7 +316,7 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
       }
     }
 
-    console.log("✅ DENY restored for all variants");
+    console.log("DENY restored for all variants");
     console.log("Line items:", order.line_items?.length);
     console.log(
       "Properties:",
