@@ -328,4 +328,122 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
   }
 });
 
+async function removeSubscriberTag(customerId: number): Promise<void> {
+  const result = await shopifyGraphQL(
+    `
+    mutation removeTag($id: ID!, $tags: [String!]!) {
+      tagsRemove(id: $id, tags: $tags) {
+        node { id }
+        userErrors { field message }
+      }
+    }
+  `,
+    {
+      id: `gid://shopify/Customer/${customerId}`,
+      tags: ["select_member"],
+    },
+  );
+
+  const errors = result?.data?.tagsRemove?.userErrors;
+  if (errors?.length) {
+    console.error("Remove tag errors:", errors);
+  } else {
+    console.log(`tag select_member removed → customer ${customerId}`);
+  }
+}
+
+async function clearSubscriberMetafield(customerId: number): Promise<void> {
+  const result = await shopifyGraphQL(
+    `
+    mutation setMetafield($metafields: [MetafieldsSetInput!]!) {
+      metafieldsSet(metafields: $metafields) {
+        metafields { key namespace value }
+        userErrors { field message }
+      }
+    }
+  `,
+    {
+      metafields: [
+        {
+          ownerId: `gid://shopify/Customer/${customerId}`,
+          namespace: "custom",
+          key: "is_subscriber",
+          value: "false",
+          type: "boolean",
+        },
+      ],
+    },
+  );
+
+  const errors = result?.data?.metafieldsSet?.userErrors;
+  if (errors?.length) {
+    console.error("Metafield clear errors:", errors);
+  } else {
+    console.log(`is_subscriber = false → customer ${customerId}`);
+  }
+}
+
+router.post("/subscription-updated", async (req: Request, res: Response) => {
+  const rawBody = req.body as Buffer;
+  res.status(200).send("OK");
+
+  try {
+    const contract = JSON.parse(rawBody.toString());
+
+    console.log("Subscription contract update:", {
+      id: contract.id,
+      status: contract.status,
+      customerId: contract.customer_id,
+    });
+
+    const customerId = contract.customer_id;
+    if (!customerId) {
+      console.log("Skip: no customer_id");
+      return;
+    }
+
+    const contractData = await shopifyGraphQL(
+      `query getContract($id: ID!) {
+        subscriptionContract(id: $id) {
+          lines(first: 10) {
+            edges {
+              node {
+                productId
+              }
+            }
+          }
+        }
+      }`,
+      { id: `gid://shopify/SubscriptionContract/${contract.id}` },
+    );
+
+    const lines = contractData?.data?.subscriptionContract?.lines?.edges ?? [];
+    const hasMembershipLine = lines.some(
+      (edge: any) =>
+        Number(edge.node?.productId?.replace("gid://shopify/Product/", "")) ===
+        MEMBERSHIP_PRODUCT_ID,
+    );
+
+    if (!hasMembershipLine) {
+      console.log("Skip: not a membership contract");
+      return;
+    }
+
+    if (contract.status === "CANCELLED") {
+      console.log(
+        `Subscription cancelled, tag stays until expiry → customer ${customerId}`,
+      );
+      return;
+    }
+
+    if (contract.status === "EXPIRED" || contract.status === "FAILED") {
+      await removeSubscriberTag(customerId);
+      await clearSubscriberMetafield(customerId);
+      console.log(`Tag removed → customer ${customerId}`);
+    }
+  } catch (err) {
+    console.error("ERROR subscription-updated:", err);
+  }
+});
+
 export default router;
