@@ -135,11 +135,29 @@ router.post("/orders-paid", async (req: Request, res: Response) => {
 
     // Membership check
     if (order.customer?.id && isMembershipOrder(order)) {
-      console.log("💳 Membership order — setting is_subscriber + tag");
+      console.log("Membership order — setting is_subscriber + tag");
       await setSubscriberMetafield(order.customer.id);
-      await addSubscriberTag(order.customer.id);
-    }
 
+      const ANNUAL_VARIANT_ID = 48374465921191;
+      const isAnnual = order.line_items?.some(
+        (item: any) => Number(item.variant_id) === ANNUAL_VARIANT_ID,
+      );
+      const tag = isAnnual ? "select_member_annual" : "select_member";
+
+      await shopifyGraphQL(
+        `mutation addTag($id: ID!, $tags: [String!]!) {
+      tagsAdd(id: $id, tags: $tags) {
+        node { id }
+        userErrors { field message }
+      }
+    }`,
+        {
+          id: `gid://shopify/Customer/${order.customer.id}`,
+          tags: [tag],
+        },
+      );
+      console.log(`✅ tag ${tag} → customer ${order.customer.id}`);
+    }
     console.log(
       "Note attributes:",
       JSON.stringify(order.note_attributes, null, 2),
@@ -339,7 +357,7 @@ async function removeSubscriberTag(customerId: number): Promise<void> {
   `,
     {
       id: `gid://shopify/Customer/${customerId}`,
-      tags: ["select_member"],
+      tags: ["select_member", "select_member_annual"],
     },
   );
 
