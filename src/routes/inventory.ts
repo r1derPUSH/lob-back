@@ -83,8 +83,9 @@ router.post("/create-draft-order", async (req: Request, res: Response) => {
     "CHOCOLATE CHIP BRIOCHE - DELIVERY ON FRIDAY ONLY!",
     "TRADITIONAL FRENCH BRIOCHE - DELIVERY ON FRIDAY ONLY!",
     "ORGANIC SOURDOUGH COUNTRY BATARD",
+    "ORGANIC SOURDOUGH WHOLE WHEAT SANDWICH LOAF",
+    "ORGANIC SOURDOUGH COUNTRY SANDWICH LOAF",
   ]);
-
   const breadPerDate: Record<string, number> = {};
   for (const item of items) {
     const zapietId = item.properties?.find(
