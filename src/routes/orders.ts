@@ -420,13 +420,15 @@ router.post("/:id/edit", async (req: Request, res: Response) => {
       return {
         variantId: `gid://shopify/ProductVariant/${p.variantId}`,
         quantity: p.qty,
-        appliedDiscount: hasDiscount
+        ...(hasDiscount
           ? {
-              value: "10",
-              valueType: "PERCENTAGE",
-              title: "Bread Discount",
+              appliedDiscount: {
+                value: "10",
+                valueType: "PERCENTAGE",
+                title: "Bread Discount",
+              },
             }
-          : null,
+          : {}),
         properties: [
           { name: "_ZapietId", value: newZapietId },
           { name: "_subscriptionPlannerId", value: plannerId },
