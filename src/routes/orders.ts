@@ -421,7 +421,8 @@ router.post("/:id/edit", async (req: Request, res: Response) => {
         order: {
           lineItems,
           customerId: `gid://shopify/Customer/${customerId}`,
-          tags: [`EDITED_FROM_${id}`],
+          tags: [`SPLIT_FROM_${id}_EDIT`],
+
           note: `Edited from order ${id} | ${newZapietId}`,
         },
       },
