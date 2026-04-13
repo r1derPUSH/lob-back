@@ -21,6 +21,7 @@ const GET_ORDER = `
   query getOrder($id: ID!) {
     order(id: $id) {
       id
+      name
       cancelledAt
       customer {
         id
@@ -28,6 +29,13 @@ const GET_ORDER = `
       lineItems(first: 50) {
         edges {
           node {
+            title
+            quantity
+            image { url }
+            variant { id }
+            originalUnitPriceSet {
+              shopMoney { amount }
+            }
             customAttributes {
               key
               value
@@ -160,6 +168,98 @@ router.post("/:id/cancel", async (req: Request, res: Response) => {
     res.json({ ok: true });
   } catch (err) {
     console.error("ERROR cancelling order:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const customerId = req.query.customerId as string;
+
+  if (!customerId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const orderId = `gid://shopify/Order/${id}`;
+
+  try {
+    const orderRes = await shopifyGraphQL(GET_ORDER, { id: orderId });
+    const order = orderRes?.data?.order;
+
+    if (!order) {
+      res.status(404).json({ error: "Order not found" });
+      return;
+    }
+
+    // Verify order belongs to this customer
+    const orderCustomerId = order.customer?.id?.replace(
+      "gid://shopify/Customer/",
+      "",
+    );
+    if (String(orderCustomerId) !== String(customerId)) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    // Parse line items
+    const allAttributes: { key: string; value: string }[] =
+      order.lineItems.edges.flatMap(
+        (edge: any) => edge.node.customAttributes ?? [],
+      );
+
+    const isPlannerOrder = allAttributes.some(
+      (a) => a.key === "_subscriptionPlannerId",
+    );
+    if (!isPlannerOrder) {
+      res.status(403).json({ error: "Not a planner order" });
+      return;
+    }
+
+    const deliveryDate =
+      allAttributes.find((a) => a.key === "Delivery date")?.value ?? "";
+    const zapietId =
+      allAttributes.find((a) => a.key === "_ZapietId")?.value ?? "";
+
+    // Parse location from ZapietId e.g. M=D&L=252511&D=...
+    const locationMatch = zapietId.match(/L=(\d+)/);
+    const locationId = locationMatch ? locationMatch[1] : "252511";
+
+    const products = order.lineItems.edges.map((edge: any) => {
+      const node = edge.node;
+      const attrs = node.customAttributes ?? [];
+      const slicedAttr = attrs.find(
+        (a: any) =>
+          a.key === "Would you like your bread sliced?" || a.key === "sliced",
+      );
+      return {
+        variantId: node.variant?.id?.replace(
+          "gid://shopify/ProductVariant/",
+          "",
+        ),
+        title: node.title,
+        price: node.originalUnitPriceSet?.shopMoney?.amount
+          ? Math.round(
+              parseFloat(node.originalUnitPriceSet.shopMoney.amount) * 100,
+            )
+          : 0,
+        qty: node.quantity,
+        image: node.image?.url ?? null,
+        hasSliced: !!slicedAttr,
+        sliced: slicedAttr?.value === "Yes" || slicedAttr?.value === "yes",
+      };
+    });
+
+    res.json({
+      id: id,
+      name: order.name,
+      deliveryDate,
+      locationId,
+      cancelledAt: order.cancelledAt,
+      products,
+    });
+  } catch (err) {
+    console.error("ERROR fetching order:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
