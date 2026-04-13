@@ -291,9 +291,28 @@ function buildZapietId(date: string, locationId: string): string {
   return `M=D&L=${locationId}&D=${iso}`;
 }
 
+const BREAD_TITLES = new Set([
+  "ORGANIC SOURDOUGH ANCIENT GRAINS II - TOURTE DE MEULE",
+  "ORGANIC OVERNIGHT OATS SOURDOUGH",
+  "ORGANIC SOURDOUGH ANCIENT GRAINS I - BATARD",
+  "ORGANIC FRENCH WHOLE WHEAT BREAD - TOURTE DE MEULE",
+  "CINNAMON CHERRY BRIOCHE - DELIVERY ON FRIDAY ONLY!",
+  "WALNUT RAISIN SOURDOUGH",
+  "ARTISAN BRIOCHE BUNS - PACK OF FOUR",
+  "ORGANIC FRENCH COUNTRY BREAD - TOURTE DE MEULE",
+  "ORGANIC SOURDOUGH WHOLE WHEAT BATARD",
+  "ORGANIC SOURDOUGH MULTI SEED",
+  "ORGANIC SOURDOUGH FRENCH RYE",
+  "CHOCOLATE CHIP BRIOCHE - DELIVERY ON FRIDAY ONLY!",
+  "TRADITIONAL FRENCH BRIOCHE - DELIVERY ON FRIDAY ONLY!",
+  "ORGANIC SOURDOUGH COUNTRY BATARD",
+  "ORGANIC SOURDOUGH WHOLE WHEAT SANDWICH LOAF",
+  "ORGANIC SOURDOUGH COUNTRY SANDWICH LOAF",
+]);
+
 router.post("/:id/edit", async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { customerId, deliveryDate, products } = req.body;
+  const { customerId, deliveryDate, products, isSubscriber } = req.body;
 
   if (!customerId) {
     res.status(401).json({ error: "Unauthorized" });
@@ -390,23 +409,39 @@ router.post("/:id/edit", async (req: Request, res: Response) => {
     // 7. Create new order with updated data
     const newZapietId = buildZapietId(deliveryDate, locationId);
 
-    const lineItems = products.map((p: any) => ({
-      variantId: `gid://shopify/ProductVariant/${p.variantId}`,
-      quantity: p.qty,
-      properties: [
-        { name: "_ZapietId", value: newZapietId },
-        { name: "_subscriptionPlannerId", value: plannerId },
-        { name: "Delivery date", value: deliveryDate },
-        ...(p.hasSliced
-          ? [
-              {
-                name: "Would you like your bread sliced?",
-                value: p.sliced ? "Yes" : "No",
-              },
-            ]
-          : []),
-      ],
-    }));
+    const totalBreadQty = products
+      .filter((p: any) => BREAD_TITLES.has(p.title?.toUpperCase().trim()))
+      .reduce((sum: number, p: any) => sum + p.qty, 0);
+
+    const lineItems = products.map((p: any) => {
+      const isBread = BREAD_TITLES.has(p.title?.toUpperCase().trim());
+      const hasDiscount = isSubscriber && isBread && totalBreadQty >= 3;
+
+      return {
+        variantId: `gid://shopify/ProductVariant/${p.variantId}`,
+        quantity: p.qty,
+        appliedDiscount: hasDiscount
+          ? {
+              value: "10",
+              valueType: "PERCENTAGE",
+              title: "Bread Discount",
+            }
+          : null,
+        properties: [
+          { name: "_ZapietId", value: newZapietId },
+          { name: "_subscriptionPlannerId", value: plannerId },
+          { name: "Delivery date", value: deliveryDate },
+          ...(p.hasSliced
+            ? [
+                {
+                  name: "Would you like your bread sliced?",
+                  value: p.sliced ? "Yes" : "No",
+                },
+              ]
+            : []),
+        ],
+      };
+    });
 
     const createRes = await shopifyGraphQL(
       `
@@ -422,7 +457,6 @@ router.post("/:id/edit", async (req: Request, res: Response) => {
           lineItems,
           customerId: `gid://shopify/Customer/${customerId}`,
           tags: [`SPLIT_FROM_${id}_EDIT`],
-
           note: `Edited from order ${id} | ${newZapietId}`,
         },
       },
