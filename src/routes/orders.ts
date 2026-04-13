@@ -380,6 +380,7 @@ router.post("/:id/edit", async (req: Request, res: Response) => {
     }
 
     // 5. Validate delivery day for city
+
     const zapietId =
       allAttributes.find((a) => a.key === "_ZapietId")?.value ?? "";
     const locationMatch = zapietId.match(/L=(\d+)/);
@@ -392,6 +393,20 @@ router.post("/:id/edit", async (req: Request, res: Response) => {
       res
         .status(400)
         .json({ error: "Delivery date is not available for your city" });
+      return;
+    }
+
+    // Validate Friday-only products
+    const FRIDAY_KEYWORDS = ["friday"];
+    const hasFridayOnlyProduct = products.some((p: any) =>
+      FRIDAY_KEYWORDS.some((k) => p.title?.toLowerCase().includes(k)),
+    );
+    if (hasFridayOnlyProduct && deliveryDayOfWeek !== 5) {
+      res.status(400).json({
+        error: "friday_only",
+        message:
+          "One or more products in your order are only available for Friday delivery.",
+      });
       return;
     }
 
