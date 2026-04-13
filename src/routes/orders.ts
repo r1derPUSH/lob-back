@@ -459,6 +459,35 @@ router.post("/:id/edit", async (req: Request, res: Response) => {
       };
     });
 
+    // Validate product availability
+    const unavailableProducts: string[] = [];
+    for (const p of products) {
+      const variantRes = await fetch(
+        `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-01/variants/${p.variantId}.json`,
+        {
+          headers: {
+            "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_ACCESS_TOKEN!,
+          },
+        },
+      );
+      const variantData = await variantRes.json();
+      const variant = variantData?.variant;
+      if (
+        !variant ||
+        (!variant.inventory_policy === false && variant.inventory_quantity <= 0)
+      ) {
+        unavailableProducts.push(p.title);
+      }
+    }
+    if (unavailableProducts.length > 0) {
+      res.status(400).json({
+        error: "products_unavailable",
+        message:
+          "One or more products in your order are no longer available. Please review your selections.",
+      });
+      return;
+    }
+
     // 7. Create draft order with discount, then complete it
     const draftRes = await fetch(
       `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-01/draft_orders.json`,
