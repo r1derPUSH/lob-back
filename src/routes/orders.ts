@@ -393,14 +393,14 @@ router.post("/:id/edit", async (req: Request, res: Response) => {
     const lineItems = products.map((p: any) => ({
       variantId: `gid://shopify/ProductVariant/${p.variantId}`,
       quantity: p.qty,
-      customAttributes: [
-        { key: "_ZapietId", value: newZapietId },
-        { key: "_subscriptionPlannerId", value: plannerId },
-        { key: "Delivery date", value: deliveryDate },
+      properties: [
+        { name: "_ZapietId", value: newZapietId },
+        { name: "_subscriptionPlannerId", value: plannerId },
+        { name: "Delivery date", value: deliveryDate },
         ...(p.hasSliced
           ? [
               {
-                key: "Would you like your bread sliced?",
+                name: "Would you like your bread sliced?",
                 value: p.sliced ? "Yes" : "No",
               },
             ]
