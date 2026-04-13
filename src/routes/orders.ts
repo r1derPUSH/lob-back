@@ -427,6 +427,8 @@ router.post("/:id/edit", async (req: Request, res: Response) => {
       },
     );
 
+    console.log("CREATE RESULT:", JSON.stringify(createRes, null, 2));
+
     const createErrors = createRes?.data?.orderCreate?.userErrors;
     if (createErrors?.length) {
       console.error("Create errors on edit:", createErrors);
