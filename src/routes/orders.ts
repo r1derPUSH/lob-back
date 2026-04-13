@@ -405,7 +405,7 @@ router.post("/:id/edit", async (req: Request, res: Response) => {
         .json({ error: "Failed to update order", details: cancelErrors });
       return;
     }
-    // 7. Create new order via REST (supports applied_discount)
+
     const newZapietId = buildZapietId(deliveryDate, locationId);
 
     const totalBreadQty = products
@@ -444,8 +444,9 @@ router.post("/:id/edit", async (req: Request, res: Response) => {
       };
     });
 
-    const createRes = await fetch(
-      `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-01/orders.json`,
+    // 7. Create draft order with discount, then complete it
+    const draftRes = await fetch(
+      `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-01/draft_orders.json`,
       {
         method: "POST",
         headers: {
@@ -453,26 +454,49 @@ router.post("/:id/edit", async (req: Request, res: Response) => {
           "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_ACCESS_TOKEN!,
         },
         body: JSON.stringify({
-          order: {
+          draft_order: {
             line_items: lineItems,
             customer: { id: parseInt(customerId) },
             tags: `SPLIT_FROM_${id}_EDIT`,
             note: `Edited from order ${id} | ${newZapietId}`,
-            financial_status: "paid",
           },
         }),
       },
     );
 
-    const createData = await createRes.json();
-    console.log("CREATE RESULT:", JSON.stringify(createData, null, 2));
+    const draftData = await draftRes.json();
+    console.log("DRAFT RESULT:", JSON.stringify(draftData?.draft_order?.id));
 
-    if (!createData?.order?.id) {
-      res.status(500).json({ error: "Failed to create updated order" });
+    if (!draftData?.draft_order?.id) {
+      res.status(500).json({ error: "Failed to create draft order" });
       return;
     }
 
-    const newOrder = createData.order;
+    // Complete draft order → becomes real paid order
+    const completeRes = await fetch(
+      `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-01/draft_orders/${draftData.draft_order.id}/complete.json`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_ACCESS_TOKEN!,
+        },
+      },
+    );
+
+    const completeData = await completeRes.json();
+    const newOrder = completeData?.draft_order?.order_id
+      ? {
+          id: completeData.draft_order.order_id,
+          name: completeData.draft_order.name,
+        }
+      : null;
+
+    if (!newOrder) {
+      res.status(500).json({ error: "Failed to complete draft order" });
+      return;
+    }
+
     console.log(`Order ${id} edited → new order ${newOrder.id}`);
     res.json({
       ok: true,
