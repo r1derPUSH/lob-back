@@ -405,8 +405,7 @@ router.post("/:id/edit", async (req: Request, res: Response) => {
         .json({ error: "Failed to update order", details: cancelErrors });
       return;
     }
-
-    // 7. Create new order with updated data
+    // 7. Create new order via REST (supports applied_discount)
     const newZapietId = buildZapietId(deliveryDate, locationId);
 
     const totalBreadQty = products
@@ -418,13 +417,13 @@ router.post("/:id/edit", async (req: Request, res: Response) => {
       const hasDiscount = isSubscriber && isBread && totalBreadQty >= 3;
 
       return {
-        variantId: `gid://shopify/ProductVariant/${p.variantId}`,
+        variant_id: parseInt(p.variantId),
         quantity: p.qty,
         ...(hasDiscount
           ? {
-              appliedDiscount: {
+              applied_discount: {
                 value: "10",
-                valueType: "PERCENTAGE",
+                value_type: "percentage",
                 title: "Bread Discount",
               },
             }
@@ -445,43 +444,40 @@ router.post("/:id/edit", async (req: Request, res: Response) => {
       };
     });
 
-    const createRes = await shopifyGraphQL(
-      `
-      mutation orderCreate($order: OrderCreateOrderInput!) {
-        orderCreate(order: $order) {
-          order { id name }
-          userErrors { field message }
-        }
-      }
-    `,
+    const createRes = await fetch(
+      `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-01/orders.json`,
       {
-        order: {
-          lineItems,
-          customerId: `gid://shopify/Customer/${customerId}`,
-          tags: [`SPLIT_FROM_${id}_EDIT`],
-          note: `Edited from order ${id} | ${newZapietId}`,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_ACCESS_TOKEN!,
         },
+        body: JSON.stringify({
+          order: {
+            line_items: lineItems,
+            customer: { id: parseInt(customerId) },
+            tags: `SPLIT_FROM_${id}_EDIT`,
+            note: `Edited from order ${id} | ${newZapietId}`,
+            financial_status: "paid",
+          },
+        }),
       },
     );
 
-    console.log("CREATE RESULT:", JSON.stringify(createRes, null, 2));
+    const createData = await createRes.json();
+    console.log("CREATE RESULT:", JSON.stringify(createData, null, 2));
 
-    const createErrors = createRes?.data?.orderCreate?.userErrors;
-    if (createErrors?.length) {
-      console.error("Create errors on edit:", createErrors);
-      res.status(500).json({
-        error: "Failed to create updated order",
-        details: createErrors,
-      });
+    if (!createData?.order?.id) {
+      res.status(500).json({ error: "Failed to create updated order" });
       return;
     }
 
-    const newOrder = createRes?.data?.orderCreate?.order;
-    console.log(`Order ${id} edited → new order ${newOrder?.id}`);
+    const newOrder = createData.order;
+    console.log(`Order ${id} edited → new order ${newOrder.id}`);
     res.json({
       ok: true,
-      newOrderId: newOrder?.id,
-      newOrderName: newOrder?.name,
+      newOrderId: newOrder.id,
+      newOrderName: newOrder.name,
     });
   } catch (err) {
     console.error("ERROR editing order:", err);
