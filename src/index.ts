@@ -2,6 +2,8 @@ import express from "express";
 import dotenv from "dotenv";
 import webhookRouter from "./routes/webhook";
 import inventoryRouter from "./routes/inventory";
+import ordersRouter from "./routes/orders";
+
 import cors from "cors";
 
 dotenv.config();
@@ -45,6 +47,7 @@ app.get("/health", (_req, res) => {
 
 app.use("/webhooks", webhookRouter);
 app.use("/api/inventory", inventoryRouter);
+app.use("/api/orders", ordersRouter); // ← сюди
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

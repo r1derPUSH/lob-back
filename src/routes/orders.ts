@@ -1,0 +1,167 @@
+import { Router, Request, Response } from "express";
+
+const router = Router();
+
+async function shopifyGraphQL(query: string, variables: any) {
+  const res = await fetch(
+    `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-01/graphql.json`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_ACCESS_TOKEN!,
+      },
+      body: JSON.stringify({ query, variables }),
+    },
+  );
+  return res.json();
+}
+
+const GET_ORDER = `
+  query getOrder($id: ID!) {
+    order(id: $id) {
+      id
+      cancelledAt
+      customer {
+        id
+      }
+      lineItems(first: 50) {
+        edges {
+          node {
+            customAttributes {
+              key
+              value
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+const CANCEL_ORDER = `
+  mutation orderCancel($orderId: ID!) {
+    orderCancel(
+      orderId: $orderId
+      reason: CUSTOMER
+      refund: false
+      restock: false
+      notifyCustomer: false
+    ) {
+      job { id }
+      userErrors { field message }
+    }
+  }
+`;
+
+function getTodayUAE(): Date {
+  const now = new Date();
+  const uaeOffset = 4 * 60;
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  return new Date(utc + uaeOffset * 60000);
+}
+
+function isCancellable(deliveryDateStr: string): boolean {
+  const today = getTodayUAE();
+  today.setHours(0, 0, 0, 0);
+
+  const delivery = new Date(deliveryDateStr);
+  delivery.setHours(0, 0, 0, 0);
+
+  const diffDays =
+    (delivery.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
+
+  return diffDays > 1;
+}
+
+router.post("/:id/cancel", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { customerId } = req.body;
+
+  if (!customerId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const orderId = `gid://shopify/Order/${id}`;
+
+  try {
+    const orderRes = await shopifyGraphQL(GET_ORDER, { id: orderId });
+    const order = orderRes?.data?.order;
+
+    if (!order) {
+      res.status(404).json({ error: "Order not found" });
+      return;
+    }
+
+    const orderCustomerId = order.customer?.id?.replace(
+      "gid://shopify/Customer/",
+      "",
+    );
+    if (String(orderCustomerId) !== String(customerId)) {
+      console.warn(
+        `Customer ${customerId} tried to cancel order belonging to ${orderCustomerId}`,
+      );
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    if (order.cancelledAt) {
+      res.status(400).json({ error: "Order is already cancelled" });
+      return;
+    }
+
+    const allAttributes: { key: string; value: string }[] =
+      order.lineItems.edges.flatMap(
+        (edge: any) => edge.node.customAttributes ?? [],
+      );
+
+    const isPlannerOrder = allAttributes.some(
+      (a) => a.key === "_subscriptionPlannerId",
+    );
+    if (!isPlannerOrder) {
+      console.warn(`Cancel attempt on non-planner order: ${id}`);
+      res
+        .status(403)
+        .json({ error: "This order cannot be cancelled via this endpoint" });
+      return;
+    }
+
+    const deliveryDateAttr = allAttributes.find(
+      (a) => a.key === "Delivery date",
+    );
+    if (!deliveryDateAttr?.value) {
+      console.warn(`No delivery date on order: ${id}`);
+      res.status(400).json({ error: "Order has no delivery date" });
+      return;
+    }
+
+    if (!isCancellable(deliveryDateAttr.value)) {
+      res.status(400).json({
+        error: "not_cancellable",
+        message:
+          "This delivery can no longer be cancelled. Orders are charged one day before delivery and cannot be cancelled after payment has been taken.",
+      });
+      return;
+    }
+
+    const cancelRes = await shopifyGraphQL(CANCEL_ORDER, { orderId });
+    const userErrors = cancelRes?.data?.orderCancel?.userErrors;
+
+    if (userErrors?.length) {
+      console.error("Cancel errors:", userErrors);
+      res
+        .status(500)
+        .json({ error: "Failed to cancel order", details: userErrors });
+      return;
+    }
+
+    console.log(`Order ${id} cancelled by customer ${customerId}`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("ERROR cancelling order:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+export default router;
