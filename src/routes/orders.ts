@@ -264,4 +264,190 @@ router.get("/:id", async (req: Request, res: Response) => {
   }
 });
 
+const LOCATION_IDS: Record<string, string> = {
+  "252511": "Dubai",
+  "252716": "Sharjah",
+  "252718": "Abu Dhabi",
+  "252717": "Al Ain",
+};
+
+const CITY_DELIVERY_DAYS: Record<string, number[]> = {
+  Dubai: [0, 1, 2, 3, 4, 5, 6],
+  Sharjah: [0, 1, 2, 3, 4, 5, 6],
+  "Abu Dhabi": [0, 3, 5],
+  "Al Ain": [2],
+};
+
+function isDateEditable(deliveryDateStr: string): boolean {
+  return isCancellable(deliveryDateStr); // same D-1 cutoff
+}
+
+function buildZapietId(date: string, locationId: string): string {
+  const d = new Date(date);
+  const iso = d
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "Z")
+    .replace(/T\d{2}:\d{2}:\d{2}Z$/, "T00:00:00Z");
+  return `M=D&L=${locationId}&D=${iso}`;
+}
+
+router.post("/:id/edit", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { customerId, deliveryDate, products } = req.body;
+
+  if (!customerId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  if (
+    !deliveryDate ||
+    !products ||
+    !Array.isArray(products) ||
+    products.length === 0
+  ) {
+    res.status(400).json({ error: "deliveryDate and products are required" });
+    return;
+  }
+
+  const orderId = `gid://shopify/Order/${id}`;
+
+  try {
+    // 1. Fetch order
+    const orderRes = await shopifyGraphQL(GET_ORDER, { id: orderId });
+    const order = orderRes?.data?.order;
+
+    if (!order) {
+      res.status(404).json({ error: "Order not found" });
+      return;
+    }
+
+    // 2. Verify ownership
+    const orderCustomerId = order.customer?.id?.replace(
+      "gid://shopify/Customer/",
+      "",
+    );
+    if (String(orderCustomerId) !== String(customerId)) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    // 3. Check planner order
+    const allAttributes: { key: string; value: string }[] =
+      order.lineItems.edges.flatMap(
+        (edge: any) => edge.node.customAttributes ?? [],
+      );
+
+    const isPlannerOrder = allAttributes.some(
+      (a) => a.key === "_subscriptionPlannerId",
+    );
+    if (!isPlannerOrder) {
+      res.status(403).json({ error: "Not a planner order" });
+      return;
+    }
+
+    const plannerId =
+      allAttributes.find((a) => a.key === "_subscriptionPlannerId")?.value ??
+      "";
+
+    // 4. Re-validate delivery date (D-1 cutoff)
+    if (!isDateEditable(deliveryDate)) {
+      res.status(400).json({
+        error: "not_editable",
+        message:
+          "This delivery can no longer be edited. Orders are locked one day before delivery.",
+      });
+      return;
+    }
+
+    // 5. Validate delivery day for city
+    const zapietId =
+      allAttributes.find((a) => a.key === "_ZapietId")?.value ?? "";
+    const locationMatch = zapietId.match(/L=(\d+)/);
+    const locationId = locationMatch ? locationMatch[1] : "252511";
+    const city = LOCATION_IDS[locationId] ?? "Dubai";
+    const allowedDays = CITY_DELIVERY_DAYS[city] ?? [0, 1, 2, 3, 4, 5, 6];
+    const deliveryDayOfWeek = new Date(deliveryDate).getDay();
+
+    if (!allowedDays.includes(deliveryDayOfWeek)) {
+      res
+        .status(400)
+        .json({ error: "Delivery date is not available for your city" });
+      return;
+    }
+
+    // 6. Cancel original order
+    const cancelRes = await shopifyGraphQL(CANCEL_ORDER, { orderId });
+    const cancelErrors = cancelRes?.data?.orderCancel?.userErrors;
+    if (cancelErrors?.length) {
+      console.error("Cancel errors on edit:", cancelErrors);
+      res
+        .status(500)
+        .json({ error: "Failed to update order", details: cancelErrors });
+      return;
+    }
+
+    // 7. Create new order with updated data
+    const newZapietId = buildZapietId(deliveryDate, locationId);
+
+    const lineItems = products.map((p: any) => ({
+      variantId: `gid://shopify/ProductVariant/${p.variantId}`,
+      quantity: p.qty,
+      customAttributes: [
+        { key: "_ZapietId", value: newZapietId },
+        { key: "_subscriptionPlannerId", value: plannerId },
+        { key: "Delivery date", value: deliveryDate },
+        ...(p.hasSliced
+          ? [
+              {
+                key: "Would you like your bread sliced?",
+                value: p.sliced ? "Yes" : "No",
+              },
+            ]
+          : []),
+      ],
+    }));
+
+    const createRes = await shopifyGraphQL(
+      `
+      mutation orderCreate($order: OrderCreateOrderInput!) {
+        orderCreate(order: $order) {
+          order { id name }
+          userErrors { field message }
+        }
+      }
+    `,
+      {
+        order: {
+          lineItems,
+          customerId: `gid://shopify/Customer/${customerId}`,
+          tags: [`EDITED_FROM_${id}`],
+          note: `Edited from order ${id} | ${newZapietId}`,
+        },
+      },
+    );
+
+    const createErrors = createRes?.data?.orderCreate?.userErrors;
+    if (createErrors?.length) {
+      console.error("Create errors on edit:", createErrors);
+      res.status(500).json({
+        error: "Failed to create updated order",
+        details: createErrors,
+      });
+      return;
+    }
+
+    const newOrder = createRes?.data?.orderCreate?.order;
+    console.log(`Order ${id} edited → new order ${newOrder?.id}`);
+    res.json({
+      ok: true,
+      newOrderId: newOrder?.id,
+      newOrderName: newOrder?.name,
+    });
+  } catch (err) {
+    console.error("ERROR editing order:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 export default router;
