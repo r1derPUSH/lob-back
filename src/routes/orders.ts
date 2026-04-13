@@ -474,7 +474,8 @@ router.post("/:id/edit", async (req: Request, res: Response) => {
       const variant = variantData?.variant;
       if (
         !variant ||
-        (!variant.inventory_policy === false && variant.inventory_quantity <= 0)
+        (variant.inventory_policy !== "continue" &&
+          variant.inventory_quantity <= 0)
       ) {
         unavailableProducts.push(p.title);
       }
